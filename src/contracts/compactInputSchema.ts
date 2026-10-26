@@ -15,6 +15,9 @@ import {
 
 /** Annotation keys that carry guidance but no validation semantics. */
 const annotationKeys = new Set(["description", "examples", "default", "title"]);
+// `detail` selects between complete Evidence and a bounded summary. Without
+// its guidance, callers default to complete replies that can exceed context.
+const retainedRootPropertyDescriptions = new Set(["detail"]);
 
 const definitionKeys = new Set(["$defs", "definitions"]);
 // An empty schema accepts every JSON value. Kimi otherwise infers string.
@@ -115,7 +118,8 @@ const rebuildSchemaPositions = (
  * Drop annotation prose from every subschema while preserving all validation
  * keywords. The root keeps its own description because the root-union
  * projection encodes accepted input groups there; the root's echoed literal
- * examples leave with the rest of the annotation prose.
+ * examples leave with the rest of the annotation prose. Retained root
+ * properties keep their description.
  */
 const stripAnnotations = (
   schema: Record<string, unknown>,
@@ -129,6 +133,18 @@ const stripAnnotations = (
     if (annotationKeys.has(key) && key !== "description") continue;
     out[key] = value;
   }
+  const original = isSchemaObject(schema.properties) ? schema.properties : {};
+  if (isSchemaObject(out.properties))
+    for (const name of retainedRootPropertyDescriptions) {
+      const source = original[name];
+      const kept = out.properties[name];
+      if (
+        isSchemaObject(source) &&
+        isSchemaObject(kept) &&
+        typeof source.description === "string"
+      )
+        out.properties[name] = { ...kept, description: source.description };
+    }
   return out;
 };
 
